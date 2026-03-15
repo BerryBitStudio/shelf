@@ -1,5 +1,5 @@
 """
-Test signatures for me/api
+Test signatures for shelf/api
 
 These define WHAT to test. Implementation details will be filled in
 once auth changes are stable.
