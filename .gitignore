@@ -26,4 +26,5 @@ dist-ssr
 # Python
 __pycache__/
 *.pyc
+api/.venv/
 api/data/

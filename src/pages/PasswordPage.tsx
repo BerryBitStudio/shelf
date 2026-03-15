@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { LuArrowLeft, LuCheck } from 'react-icons/lu'
-import Hero from '../components/Hero'
 
 const CARET_COLORS = [
     'var(--color-accent)',
@@ -90,7 +89,7 @@ export default function PasswordPage({ onBack, onHome }: { onBack: () => void, o
     if (done) {
         return (
             <main className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
-                <Hero />
+                <h1 className="text-2xl font-medium text-text">Change password</h1>
                 <div className="flex flex-col items-center gap-3">
                     <LuCheck size={32} className="text-accent" />
                     <p className="text-sm text-text">Password changed</p>
@@ -109,7 +108,7 @@ export default function PasswordPage({ onBack, onHome }: { onBack: () => void, o
 
     return (
         <main className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
-            <Hero />
+            <h1 className="text-2xl font-medium text-text">Change password</h1>
 
             <form onSubmit={handleSubmit} className="flex flex-col items-center gap-3 w-full max-w-48">
                 {[

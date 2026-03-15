@@ -164,7 +164,7 @@ export default function TransferItem({ transfer, size = 100 }: TransferItemProps
                                 >
                                     {transfer.content}
                                 </span>
-                                <LuClipboard size={14} className="absolute top-2 right-2 text-text-muted opacity-30 group-hover:opacity-70 transition-opacity" />
+                                <LuClipboard size={12} className="absolute top-2 right-2 text-text-muted opacity-25 group-hover:opacity-60 transition-opacity" />
                             </>
                         )
                     ) : (

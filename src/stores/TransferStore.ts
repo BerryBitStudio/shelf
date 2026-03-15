@@ -44,6 +44,20 @@ function getStatusText(transfers: Transfer[]): string {
     return parts.join(', ') || 'Empty'
 }
 
+// Atomic inflight helpers to avoid race conditions
+function inflightUp(set: any, activity: string) {
+    set((s: TransferStore) => ({ inflight: s.inflight + 1, activity, error: null }))
+}
+
+function inflightDown(set: any) {
+    set((s: TransferStore) => {
+        const n = s.inflight - 1
+        return n === 0
+            ? { inflight: 0, activity: '', statusText: getStatusText(s.transfers) }
+            : { inflight: n }
+    })
+}
+
 // Sequential upload queue to avoid overwhelming browser connection limits
 const uploadQueue: (() => Promise<void>)[] = []
 let uploading = false
@@ -68,7 +82,8 @@ const useTransferStore = create<TransferStore>((set, get) => ({
     selected: [],
 
     async fetch() {
-        set({ inflight: get().inflight + 1, activity: 'Loading', error: null, selected: [] })
+        inflightUp(set, 'Loading')
+        set({ selected: [] })
         try {
             const res = await api('/')
             const transfers: Transfer[] = await res.json()
@@ -76,8 +91,8 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         } catch (e: any) {
             set({ error: e.message })
         } finally {
-            const n = get().inflight - 1
-            set({ inflight: n, ...(n === 0 ? { activity: '', statusText: getStatusText(get().transfers) } : {}), ready: true })
+            inflightDown(set)
+            set({ ready: true })
         }
     },
 
@@ -85,7 +100,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         const dup = get().transfers.find(t => t.type === 'text' && t.content === content)
         if (dup) return dup.id
 
-        set({ error: null, inflight: get().inflight + 1, activity: 'Sending' })
+        inflightUp(set, 'Sending')
 
         try {
             const res = await api('/', {
@@ -98,13 +113,18 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         } catch (e: any) {
             set({ error: e.message })
         } finally {
-            const n = get().inflight - 1
-            set({ inflight: n, ...(n === 0 ? { activity: '', statusText: getStatusText(get().transfers) } : {}) })
+            inflightDown(set)
         }
     },
 
     async uploadFile(file: File) {
-        set({ error: null, inflight: get().inflight + 1, activity: 'Uploading' })
+        const MAX_FILE = 1024 * 1024 * 1024
+        if (file.size > MAX_FILE) {
+            set({ error: 'File exceeds 1GB limit' })
+            return
+        }
+
+        inflightUp(set, 'Uploading')
 
         uploadQueue.push(async () => {
             try {
@@ -119,41 +139,38 @@ const useTransferStore = create<TransferStore>((set, get) => ({
             } catch (e: any) {
                 set({ error: e.message })
             } finally {
-                const n = get().inflight - 1
-                set({ inflight: n, ...(n === 0 ? { activity: '', statusText: getStatusText(get().transfers) } : {}) })
+                inflightDown(set)
             }
         })
         drainQueue()
     },
 
     async remove(id: number) {
-        const prev = get().transfers
+        inflightUp(set, 'Deleting')
         set({
-            error: null,
-            inflight: get().inflight + 1,
-            activity: 'Deleting',
-            transfers: prev.filter(t => t.id !== id),
+            transfers: get().transfers.filter(t => t.id !== id),
             selected: get().selected.filter(s => s !== id),
         })
 
         try {
             await api(`/${id}`, { method: 'DELETE' })
         } catch (e: any) {
-            set({ error: e.message, transfers: prev })
+            // Re-fetch from server instead of restoring stale snapshot
+            set({ error: e.message })
+            try {
+                const res = await api('/')
+                set({ transfers: await res.json() })
+            } catch { /* fetch error already surfaced */ }
         } finally {
-            const n = get().inflight - 1
-            set({ inflight: n, ...(n === 0 ? { activity: '', statusText: getStatusText(get().transfers) } : {}) })
+            inflightDown(set)
         }
     },
 
     async batchRemove(ids: number[]) {
-        const prev = get().transfers
+        inflightUp(set, 'Deleting')
         const idSet = new Set(ids)
         set({
-            error: null,
-            inflight: get().inflight + 1,
-            activity: 'Deleting',
-            transfers: prev.filter(t => !idSet.has(t.id)),
+            transfers: get().transfers.filter(t => !idSet.has(t.id)),
             selected: get().selected.filter(s => !idSet.has(s)),
         })
 
@@ -164,10 +181,14 @@ const useTransferStore = create<TransferStore>((set, get) => ({
                 body: JSON.stringify({ ids }),
             })
         } catch (e: any) {
-            set({ error: e.message, transfers: prev })
+            // Re-fetch from server instead of restoring stale snapshot
+            set({ error: e.message })
+            try {
+                const res = await api('/')
+                set({ transfers: await res.json() })
+            } catch { /* fetch error already surfaced */ }
         } finally {
-            const n = get().inflight - 1
-            set({ inflight: n, ...(n === 0 ? { activity: '', statusText: getStatusText(get().transfers) } : {}) })
+            inflightDown(set)
         }
     },
 
@@ -188,17 +209,13 @@ const useTransferStore = create<TransferStore>((set, get) => ({
             get().download(fileIds[0])
             return
         }
-        // POST to batch-download and trigger download from blob
-        fetch(`${API}/batch-download`, {
+        inflightUp(set, 'Downloading')
+        api('/batch-download', {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: fileIds }),
         })
-            .then(res => {
-                if (!res.ok) throw new Error(res.statusText)
-                return res.blob()
-            })
+            .then(res => res.blob())
             .then(blob => {
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
@@ -208,6 +225,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
                 URL.revokeObjectURL(url)
             })
             .catch(e => set({ error: e.message }))
+            .finally(() => inflightDown(set))
     },
 
     toggleSelect(id: number) {

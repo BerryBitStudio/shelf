@@ -55,7 +55,7 @@ export default function AccessPage({ onLogin }: { onLogin: () => void }) {
     }, [])
 
     return (
-        <main className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
+        <main className="flex flex-col items-center justify-center min-h-screen gap-4 px-4">
             <Hero />
             <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4 w-full max-w-54">
                 <div className="inline-flex items-center gap-2 px-1 py-1 rounded-full w-full

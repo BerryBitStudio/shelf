@@ -1,20 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import useTransferStore from '../stores/TransferStore'
-
-const CARET_COLORS = [
-    'var(--color-accent)',
-    'var(--color-accent-light)',
-    'var(--color-accent-dark)',
-    'var(--color-highlight)',
-    'var(--color-accent-light)',
-    'var(--color-accent)',
-]
 
 export default function TextInput() {
     const { createText, activity } = useTransferStore()
     const [value, setValue] = useState('')
-    const caretIdx = useRef(0)
-    const [caretColor, setCaretColor] = useState(CARET_COLORS[0])
 
     const { selected, batchDownload } = useTransferStore()
 
@@ -51,11 +40,7 @@ export default function TextInput() {
         <input
             type="text"
             value={value}
-            onChange={e => {
-                setValue(e.target.value)
-                caretIdx.current = (caretIdx.current + 1) % CARET_COLORS.length
-                setCaretColor(CARET_COLORS[caretIdx.current])
-            }}
+            onChange={e => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!!activity}
             placeholder="Send text"
@@ -64,7 +49,7 @@ export default function TextInput() {
                        mx-0.25 pl-2.75 my-0.25 py-1.5 text-xs text-text placeholder:text-text/60
                        hover:placeholder:text-accent focus:placeholder:text-accent
                        placeholder:transition-colors disabled:opacity-50"
-            style={{ caretColor }}
+            style={{ caretColor: 'var(--color-accent)' }}
         />
         <div className="absolute bottom-1 left-3 right-0 h-px bg-border/30 pointer-events-none transition-colors peer-focus:bg-accent/50" />
         </div>

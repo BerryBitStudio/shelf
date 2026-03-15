@@ -1,22 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import useAuthStore from './stores/AuthStore'
 import AccessPage from './pages/AccessPage'
 import TransferPage from './pages/TransferPage'
 import HelpPage from './pages/HelpPage'
 import PasswordPage from './pages/PasswordPage'
 
 export default function App() {
-    const [authed, setAuthed] = useState(null)
+    const { authed, checkAuth, login } = useAuthStore()
     const [page, setPage] = useState('transfer')
 
-    useEffect(() => {
-        fetch('/api/auth/check', { credentials: 'include' })
-            .then(res => setAuthed(res.ok))
-            .catch(() => setAuthed(false))
-    }, [])
+    useEffect(() => { checkAuth() }, [checkAuth])
 
     if (authed === null) return null
 
-    if (!authed) return <AccessPage onLogin={() => setAuthed(true)} />
+    if (!authed) return <AccessPage onLogin={login} />
 
     if (page === 'help') return <HelpPage onBack={() => setPage('transfer')} onPassword={() => setPage('password')} />
 

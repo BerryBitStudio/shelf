@@ -16,7 +16,7 @@ const KEYBINDS = [
     ['?', 'Help'],
 ]
 
-export default function HelpPage({ onBack, onPassword }: { onBack: () => void, onPassword: () => void }) {
+export default function HelpPage({ onBack, onPassword }: { onBack: () => void, onPassword?: () => void }) {
     useEffect(() => {
         function handleKey(e: KeyboardEvent) {
             if (e.key === 'Escape') { e.preventDefault(); onBack() }
@@ -36,14 +36,16 @@ export default function HelpPage({ onBack, onPassword }: { onBack: () => void, o
                     Back
                 </button>
 
-                <div className="mb-4">
-                    <button
-                        onClick={onPassword}
-                        className="text-sm text-text-muted hover:text-accent transition-colors cursor-pointer underline underline-offset-4 decoration-text/30 hover:decoration-accent"
-                    >
-                        Change password
-                    </button>
-                </div>
+                {onPassword && (
+                    <div className="mb-4">
+                        <button
+                            onClick={onPassword}
+                            className="text-sm text-text-muted hover:text-accent transition-colors cursor-pointer underline underline-offset-4 decoration-text/30 hover:decoration-accent"
+                        >
+                            Change password
+                        </button>
+                    </div>
+                )}
 
                 <div className="hidden sm:block">
                     <h1 className="text-2xl font-medium text-text mb-6">Keybinds</h1>
@@ -83,6 +85,18 @@ export default function HelpPage({ onBack, onPassword }: { onBack: () => void, o
                 <div className="mt-8">
                     <Hero />
                 </div>
+
+                <footer className="mt-10 pt-6 border-t border-border/20 text-center">
+                    <a
+                        href="https://github.com/MutantCacti/shelf/issues/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-text-muted hover:text-accent transition-colors underline underline-offset-4 decoration-text/30 hover:decoration-accent"
+                    >
+                        Send feedback
+                    </a>
+                    <p className="text-[0.6rem] text-border mt-3">&copy; 2026 Maxence Morel Dierckx. All rights reserved.</p>
+                </footer>
             </div>
         </div>
     )

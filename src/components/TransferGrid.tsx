@@ -6,7 +6,7 @@ import TransferBar from './TransferBar'
 const MAX_ITEM = 100
 const GAP = 16
 const MIN_ITEM = 40
-const BAR_OFFSET = 32
+const BAR_OFFSET = 48
 
 function gridBounds(positions: [number, number][]) {
     if (positions.length === 0) return { cols: 0, rows: 0, minX: 0, minY: 0 }
@@ -49,7 +49,7 @@ function rectsIntersect(
 }
 
 export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
-    const { transfers, error, fetch, uploadFile, clearSelection } = useTransferStore()
+    const { transfers, fetch, uploadFile, clearSelection } = useTransferStore()
     const [dragging, setDragging] = useState(false)
     const [lasso, setLasso] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null)
     const lassoRef = useRef(lasso)
@@ -125,7 +125,7 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
         for (let i = 0; i < transfers.length; i++) {
             const [gx, gy] = positions[i]
             const ix = cx + gx * cell - cell / 2
-            const iy = cy + gy * cell - cell / 2
+            const iy = cy + gy * cell - cell / 2 + BAR_OFFSET
             if (rectsIntersect(lx, ly, lw, lh, ix, iy, itemSize, itemSize)) {
                 hit.push(transfers[i].id)
             }
@@ -206,10 +206,18 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
         Array.from(e.dataTransfer.files).forEach(f => uploadFile(f))
     }, [uploadFile])
 
+    const maxY = bounds.minY + bounds.rows - 1
+    const minHeight = transfers.length > 0
+        ? 2 * (Math.max(
+            Math.abs(bounds.minY * cell - cell / 2 + BAR_OFFSET),
+            Math.abs(maxY * cell + cell / 2 + BAR_OFFSET),
+        ) + GAP)
+        : 0
+
     return (
         <div
             ref={containerRef}
-            className={`flex-1 flex flex-col overflow-auto transition-colors ${
+            className={`flex-1 flex flex-col transition-colors ${
                 dragging ? 'bg-accent/5' : ''
             }`}
             onClick={e => {
@@ -220,37 +228,35 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
             onDragLeave={handleFileDragLeave}
             onDrop={handleFileDrop}
         >
-            {error && (
-                <p className="text-red-400 text-sm absolute top-4 left-4 z-10">{error}</p>
-            )}
+            <div
+                ref={barRef}
+                className="fixed inset-x-0 mx-auto w-fit max-w-lg px-4 z-20"
+                style={{
+                    top: transfers.length > 0
+                        ? `max(1rem, calc(50vh + ${bounds.minY * cell - cell / 2 - GAP - barHeight + BAR_OFFSET}px))`
+                        : `calc(50vh - ${barHeight / 2}px)`,
+                    transition: 'top 0.3s ease-out',
+                }}
+            >
+                <div
+                    className="absolute left-1/2 -translate-x-1/2 w-screen pointer-events-none z-[-1]"
+                    style={{
+                        top: '-0.5rem',
+                        bottom: '-1rem',
+                        opacity: dragging ? 0 : 1,
+                        transition: dragging ? 'none' : 'opacity 300ms',
+                        background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
+                    }}
+                />
+                <TransferBar onHelp={onHelp} />
+            </div>
 
             <div
                 ref={gridRef}
-                className="flex-1 relative select-none overflow-visible"
+                className="flex-1 relative select-none overflow-y-auto overflow-x-hidden"
+                style={{ minHeight }}
                 onMouseDown={transfers.length > 0 ? handleMouseDown : undefined}
             >
-                <div
-                    ref={barRef}
-                    className="absolute inset-x-0 mx-auto w-fit max-w-lg px-4 z-20"
-                    style={{
-                        top: transfers.length > 0
-                            ? `calc(50vh + ${bounds.minY * cell - cell / 2 - GAP - barHeight + BAR_OFFSET}px)`
-                            : `calc(50vh - ${barHeight / 2}px)`,
-                        transition: 'top 0.3s ease-out',
-                    }}
-                >
-                    <div
-                        className="absolute inset-x-0 pointer-events-none z-[-1]"
-                        style={{
-                            top: '-0.5rem',
-                            bottom: '-1rem',
-                            opacity: dragging ? 0 : 1,
-                            transition: dragging ? 'none' : 'opacity 300ms',
-                            background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
-                        }}
-                    />
-                    <TransferBar onHelp={onHelp} />
-                </div>
                 {transfers.map((t, i) => {
                     const [gx, gy] = positions[i]
                     return (

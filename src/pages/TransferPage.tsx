@@ -2,10 +2,11 @@ import { useEffect, useCallback, useState } from 'react'
 import TransferGrid from '../components/TransferGrid'
 import ConfirmModal from '../components/ConfirmModal'
 import useTransferStore from '../stores/TransferStore'
+import useAuthStore from '../stores/AuthStore'
 import ToastContainer from '../components/Toast'
 
 export default function TransferPage({ onHelp }: { onHelp: () => void }) {
-    const { remove, batchRemove, clearSelection } = useTransferStore()
+    const { batchRemove, clearSelection } = useTransferStore()
     const [showConfirm, setShowConfirm] = useState(false)
 
     const [deleteTargets, setDeleteTargets] = useState<number[]>([])
@@ -46,8 +47,7 @@ export default function TransferPage({ onHelp }: { onHelp: () => void }) {
         }
         if (e.key === 'Escape' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault()
-            fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-                .finally(() => window.location.reload())
+            useAuthStore.getState().logout()
             return
         }
         if (e.key === 'Escape') {

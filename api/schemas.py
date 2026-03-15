@@ -42,7 +42,7 @@ TransferType = Literal["text", "file"]
 
 
 class BatchDeleteRequest(BaseModel):
-    ids: list[int]
+    ids: list[int] = Field(..., max_length=1000)
 
 
 class TransferCreate(BaseModel):

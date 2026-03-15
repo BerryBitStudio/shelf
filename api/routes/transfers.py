@@ -4,7 +4,7 @@ import os
 import zipfile
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from litestar import Router, get, post, delete, Request
 from litestar.datastructures import UploadFile
@@ -19,8 +19,17 @@ from models import Transfer
 from routes.auth import require_auth
 from schemas import BatchDeleteRequest, TransferCreate, TransferResponse
 
-MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB per file
+MAX_USER_STORAGE = 1024 * 1024 * 1024  # 1GB total per user
 STREAM_CHUNK_SIZE = 64 * 1024  # 64KB
+
+
+def user_storage_bytes(user_id: int) -> int:
+    """Total bytes used by a user's file transfers on disk."""
+    d = TRANSFERS_DIR / str(user_id)
+    if not d.exists():
+        return 0
+    return sum(f.stat().st_size for f in d.iterdir() if f.is_file())
 
 
 def user_transfers_dir(user_id: int):
@@ -90,6 +99,10 @@ async def create_file_transfer(
 
     original_filename = data.filename or "unnamed"
 
+    current_usage = user_storage_bytes(user_id)
+    if current_usage >= MAX_USER_STORAGE:
+        raise ClientException("Storage limit reached (1GB)", status_code=413)
+
     db = SessionLocal()
     try:
         transfer = Transfer(type="file", content=original_filename, user_id=user_id)
@@ -105,6 +118,8 @@ async def create_file_transfer(
                     written += len(chunk)
                     if written > MAX_FILE_SIZE:
                         raise ClientException("File exceeds 1GB limit", status_code=413)
+                    if current_usage + written > MAX_USER_STORAGE:
+                        raise ClientException("Storage limit reached (1GB)", status_code=413)
                     f.write(chunk)
         except ClientException:
             try:
@@ -325,6 +340,8 @@ def generate_thumbnail(transfer_id: int, user_id: int, source_path, filename: st
             # JPEG draft mode: decode at reduced resolution directly from DCT
             if img.format == "JPEG":
                 img.draft("RGB", THUMB_SIZE)
+
+            img = ImageOps.exif_transpose(img)
 
         img.thumbnail(THUMB_SIZE, Image.BILINEAR)
 

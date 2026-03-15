@@ -56,3 +56,9 @@ class Transfer(Base):
     )
 
 
+class EndpointStat(Base):
+    """Per-endpoint request counts."""
+    __tablename__ = "endpoint_stats"
+
+    endpoint: Mapped[str] = mapped_column(String(255), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

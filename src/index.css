@@ -79,7 +79,7 @@ textarea:focus-visible {
 
 
 .glow-wrap:hover {
-    transform: rotate(3deg) scale(1.05);
+    transform: rotate(-3deg) scale(1.05);
     box-shadow: 0 4px 12px 2px rgba(0, 0, 0, 0.3);
 }
 
@@ -189,7 +189,7 @@ textarea:focus-visible {
         var(--color-accent-light),
         var(--color-accent-dark)
     );
-    animation: gradient-rotate 4s linear infinite;
+    animation: gradient-rotate 2s linear infinite;
 }
 
 .hover-glow {
@@ -214,4 +214,8 @@ textarea:focus-visible {
 
 .hover-glow:focus-visible {
     outline: none;
+}
+
+.logout-glow::before {
+    background: radial-gradient(circle, rgba(180, 90, 90, 0.25) 0%, transparent 70%);
 }
