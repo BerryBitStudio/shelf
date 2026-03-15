@@ -1,3 +1,5 @@
+import { LuGithub } from 'react-icons/lu'
+
 const VERSION = __APP_VERSION__
 
 export default function Hero() {
@@ -9,7 +11,15 @@ export default function Hero() {
             </div>
             <p className="relative text-xs text-text-muted">
                 A simple online transfer tool
-                <span className="absolute -top-3.5 right-0 text-[0.6rem] text-text-muted/30">{VERSION}</span>
+                <a
+                    href="https://github.com/MutantCacti/shelf/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute -top-3.5 right-0 inline-flex items-center gap-1 text-[0.6rem] text-border hover:text-accent transition-colors"
+                >
+                    <LuGithub size={9} />
+                    {VERSION}
+                </a>
             </p>
         </div>
     )

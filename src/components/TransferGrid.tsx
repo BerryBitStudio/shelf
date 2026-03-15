@@ -108,6 +108,8 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
     const cell = itemSize + GAP
 
     // Lasso hit testing
+    const preLassoSelection = useRef<number[]>([])
+
     const updateLassoSelection = useCallback((l: NonNullable<typeof lasso>) => {
         const grid = gridRef.current
         if (!grid || transfers.length === 0) return
@@ -128,7 +130,8 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
                 hit.push(transfers[i].id)
             }
         }
-        useTransferStore.setState({ selected: hit })
+        const merged = [...new Set([...preLassoSelection.current, ...hit])]
+        useTransferStore.setState({ selected: merged })
     }, [transfers, positions, cell, itemSize])
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -139,7 +142,12 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
         const rect = grid.getBoundingClientRect()
         const x = e.clientX - rect.left + grid.scrollLeft
         const y = e.clientY - rect.top + grid.scrollTop
-        clearSelection()
+        if (e.shiftKey) {
+            preLassoSelection.current = [...useTransferStore.getState().selected]
+        } else {
+            preLassoSelection.current = []
+            clearSelection()
+        }
         setLasso({ startX: x, startY: y, currentX: x, currentY: y })
         e.preventDefault()
     }, [clearSelection])
@@ -236,6 +244,8 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
                         style={{
                             top: '-0.5rem',
                             bottom: '-1rem',
+                            opacity: dragging ? 0 : 1,
+                            transition: dragging ? 'none' : 'opacity 300ms',
                             background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
                         }}
                     />

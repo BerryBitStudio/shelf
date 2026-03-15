@@ -57,7 +57,7 @@ export default function AccessPage({ onLogin }: { onLogin: () => void }) {
     return (
         <main className="flex flex-col items-center justify-center min-h-screen gap-6 px-4">
             <Hero />
-            <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4 w-full max-w-xs">
+            <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4 w-full max-w-54">
                 <div className="inline-flex items-center gap-2 px-1 py-1 rounded-full w-full
                                 bg-surface border border-border/30"
                      style={{ boxShadow: '0 0 20px 8px rgba(0, 0, 0, 0.2)' }}>
@@ -89,7 +89,7 @@ export default function AccessPage({ onLogin }: { onLogin: () => void }) {
                     <button
                         type="submit"
                         disabled={loading || !password}
-                        className="text-xs text-bg bg-accent rounded-full px-3 py-1.5
+                        className="text-xs text-bg bg-accent rounded-full px-3 py-1.5 mr-0.5
                                    hover:bg-accent-light disabled:opacity-40 transition-colors
                                    cursor-pointer whitespace-nowrap"
                     >

@@ -2,15 +2,16 @@ import secrets
 from datetime import datetime, timedelta
 
 from litestar import Router, post, get, delete, Request
-from litestar.exceptions import NotAuthorizedException, NotFoundException
+from litestar.exceptions import NotAuthorizedException, NotFoundException, ClientException
 from litestar.response import Response
 from typing import Any
 import bcrypt
 
 from db import SessionLocal
-from models import Auth, ApiKey, UserSession
+from models import User, ApiKey, UserSession
 from schemas import (
     LoginRequest, LoginResponse,
+    ChangePasswordRequest, ChangePasswordResponse,
     ApiKeyCreate, ApiKeyResponse, ApiKeyCreated
 )
 from config import SESSION_COOKIE_NAME, SESSION_MAX_AGE
@@ -26,31 +27,31 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-def validate_session_token(token: str) -> bool:
-    """Validate session token against database."""
+def validate_session_token(token: str) -> int | None:
+    """Validate session token against database. Returns user_id or None."""
     db = SessionLocal()
     try:
-        token_hash = hash_password(token)
-        # Check all sessions (can't reverse hash)
         for session in db.query(UserSession).all():
             if verify_password(token, session.token_hash):
                 if session.expires_at > datetime.utcnow():
-                    return True
+                    return session.user_id
                 # Expired - delete it
                 db.delete(session)
                 db.commit()
-                return False
-        return False
+                return None
+        return None
     finally:
         db.close()
 
 
-def require_auth(request: Request[Any, Any, Any]) -> bool:
-    """Dependency to require authentication."""
+def require_auth(request: Request[Any, Any, Any]) -> int:
+    """Dependency to require authentication. Returns user_id."""
     # Check session cookie first
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
-    if session_token and validate_session_token(session_token):
-        return True
+    if session_token:
+        user_id = validate_session_token(session_token)
+        if user_id is not None:
+            return user_id
 
     # Check API key
     auth_header = request.headers.get("Authorization", "")
@@ -62,7 +63,7 @@ def require_auth(request: Request[Any, Any, Any]) -> bool:
                 if verify_password(key, api_key.key_hash):
                     api_key.last_used = datetime.utcnow()
                     db.commit()
-                    return True
+                    return api_key.user_id
         finally:
             db.close()
 
@@ -74,11 +75,14 @@ async def login(data: LoginRequest) -> Response[LoginResponse]:
     """Login with password, returns session cookie."""
     db = SessionLocal()
     try:
-        auth = db.query(Auth).first()
-        if auth is None:
-            raise NotAuthorizedException("No user configured")
+        # Iterate all users, match by password
+        matched_user = None
+        for user in db.query(User).all():
+            if verify_password(data.password, user.password_hash):
+                matched_user = user
+                break
 
-        if not verify_password(data.password, auth.password_hash):
+        if matched_user is None:
             raise NotAuthorizedException("Invalid password")
 
         # Create session token and store hash in DB
@@ -88,6 +92,7 @@ async def login(data: LoginRequest) -> Response[LoginResponse]:
 
         session_record = UserSession(
             token_hash=token_hash,
+            user_id=matched_user.id,
             expires_at=expires_at,
         )
         db.add(session_record)
@@ -117,7 +122,6 @@ async def logout(request: Request[Any, Any, Any]) -> Response:
     if session_token:
         db = SessionLocal()
         try:
-            # Find and delete the session
             for session in db.query(UserSession).all():
                 if verify_password(session_token, session.token_hash):
                     db.delete(session)
@@ -131,22 +135,52 @@ async def logout(request: Request[Any, Any, Any]) -> Response:
     return response
 
 
+@post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    request: Request[Any, Any, Any],
+) -> ChangePasswordResponse:
+    """Change the current user's password."""
+    user_id = require_auth(request)
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            raise NotAuthorizedException("User not found")
+
+        if not verify_password(data.current_password, user.password_hash):
+            raise ClientException("Current password is incorrect", status_code=400)
+
+        # Ensure new password is unique across all users
+        for other in db.query(User).filter(User.id != user_id).all():
+            if verify_password(data.new_password, other.password_hash):
+                raise ClientException("Password is already in use", status_code=409)
+
+        user.password_hash = hash_password(data.new_password)
+        db.commit()
+
+        return ChangePasswordResponse()
+    finally:
+        db.close()
+
+
 @post("/api-keys")
 async def create_api_key(
     data: ApiKeyCreate,
     request: Request[Any, Any, Any],
 ) -> ApiKeyCreated:
     """Create a new API key. Returns the key once (not stored)."""
-    require_auth(request)
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        # Generate key
         raw_key = secrets.token_urlsafe(32)
         key_hash = hash_password(raw_key)
 
         api_key = ApiKey(
             key_hash=key_hash,
+            user_id=user_id,
             name=data.name,
         )
         db.add(api_key)
@@ -168,12 +202,12 @@ async def create_api_key(
 async def list_api_keys(
     request: Request[Any, Any, Any],
 ) -> list[ApiKeyResponse]:
-    """List all API keys (without the actual keys)."""
-    require_auth(request)
+    """List all API keys for the current user."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        keys = db.query(ApiKey).all()
+        keys = db.query(ApiKey).filter(ApiKey.user_id == user_id).all()
         return [
             ApiKeyResponse(
                 id=k.id,
@@ -192,12 +226,14 @@ async def delete_api_key(
     key_id: int,
     request: Request[Any, Any, Any],
 ) -> None:
-    """Delete an API key."""
-    require_auth(request)
+    """Delete an API key owned by the current user."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        api_key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
+        api_key = db.query(ApiKey).filter(
+            ApiKey.id == key_id, ApiKey.user_id == user_id
+        ).first()
         if api_key is None:
             raise NotFoundException("API key not found")
 
@@ -215,5 +251,6 @@ async def check_auth(request: Request[Any, Any, Any]) -> dict:
 
 
 auth_router = Router(path="/auth", route_handlers=[
-    login, logout, check_auth, create_api_key, list_api_keys, delete_api_key
+    login, logout, check_auth, change_password,
+    create_api_key, list_api_keys, delete_api_key
 ])

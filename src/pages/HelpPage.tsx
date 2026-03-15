@@ -13,9 +13,10 @@ const KEYBINDS = [
     ['Enter', 'Submit text'],
     ['Delete / Backspace', 'Delete selected'],
     ['Escape', 'Clear selection'],
+    ['?', 'Help'],
 ]
 
-export default function HelpPage({ onBack }: { onBack: () => void }) {
+export default function HelpPage({ onBack, onPassword }: { onBack: () => void, onPassword: () => void }) {
     useEffect(() => {
         function handleKey(e: KeyboardEvent) {
             if (e.key === 'Escape') { e.preventDefault(); onBack() }
@@ -35,8 +36,13 @@ export default function HelpPage({ onBack }: { onBack: () => void }) {
                     Back
                 </button>
 
-                <div className="mb-8">
-                    <Hero />
+                <div className="mb-4">
+                    <button
+                        onClick={onPassword}
+                        className="text-sm text-text-muted hover:text-accent transition-colors cursor-pointer underline underline-offset-4 decoration-text/30 hover:decoration-accent"
+                    >
+                        Change password
+                    </button>
                 </div>
 
                 <div className="hidden sm:block">
@@ -72,6 +78,10 @@ export default function HelpPage({ onBack }: { onBack: () => void }) {
                             <li><span className="text-accent">Logo</span> refreshes items from the server</li>
                         </ul>
                     </div>
+                </div>
+
+                <div className="mt-8">
+                    <Hero />
                 </div>
             </div>
         </div>

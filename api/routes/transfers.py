@@ -23,11 +23,23 @@ MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB
 STREAM_CHUNK_SIZE = 64 * 1024  # 64KB
 
 
+def user_transfers_dir(user_id: int):
+    d = TRANSFERS_DIR / str(user_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def user_thumbs_dir(user_id: int):
+    d = THUMBS_DIR / str(user_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def transfer_to_response(t: Transfer) -> TransferResponse:
     """Convert ORM model to response schema."""
     size = None
     if t.type == "file":
-        path = TRANSFERS_DIR / str(t.id)
+        path = user_transfers_dir(t.user_id) / str(t.id)
         try:
             size = os.path.getsize(path)
         except OSError:
@@ -48,7 +60,7 @@ async def create_text_transfer(
     request: Request[Any, Any, Any],
 ) -> TransferResponse:
     """Create a text transfer from JSON body."""
-    require_auth(request)
+    user_id = require_auth(request)
 
     if data.type != "text":
         raise ClientException(
@@ -58,7 +70,7 @@ async def create_text_transfer(
 
     db = SessionLocal()
     try:
-        transfer = Transfer(type="text", content=data.content)
+        transfer = Transfer(type="text", content=data.content, user_id=user_id)
         db.add(transfer)
         db.commit()
         db.refresh(transfer)
@@ -74,18 +86,18 @@ async def create_file_transfer(
     data: UploadFile = Body(media_type=RequestEncodingType.MULTI_PART),
 ) -> TransferResponse:
     """Create a file transfer from multipart upload, streaming to disk."""
-    require_auth(request)
+    user_id = require_auth(request)
 
     original_filename = data.filename or "unnamed"
 
     db = SessionLocal()
     try:
-        transfer = Transfer(type="file", content=original_filename)
+        transfer = Transfer(type="file", content=original_filename, user_id=user_id)
         db.add(transfer)
         db.commit()
         db.refresh(transfer)
 
-        file_path = TRANSFERS_DIR / str(transfer.id)
+        file_path = user_transfers_dir(user_id) / str(transfer.id)
         written = 0
         try:
             with open(file_path, "wb") as f:
@@ -95,7 +107,6 @@ async def create_file_transfer(
                         raise ClientException("File exceeds 1GB limit", status_code=413)
                     f.write(chunk)
         except ClientException:
-            # Clean up partial file and DB row on size limit
             try:
                 os.remove(file_path)
             except OSError:
@@ -104,7 +115,7 @@ async def create_file_transfer(
             db.commit()
             raise
 
-        generate_thumbnail(transfer.id, file_path, original_filename)
+        generate_thumbnail(transfer.id, user_id, file_path, original_filename)
 
         return transfer_to_response(transfer)
     finally:
@@ -115,13 +126,14 @@ async def create_file_transfer(
 async def list_transfers(
     request: Request[Any, Any, Any],
 ) -> list[TransferResponse]:
-    """List all transfers, newest first."""
-    require_auth(request)
+    """List all transfers for the current user, newest first."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
         transfers = (
             db.query(Transfer)
+            .filter(Transfer.user_id == user_id)
             .order_by(Transfer.created_at.desc())
             .all()
         )
@@ -135,17 +147,22 @@ async def delete_transfer(
     transfer_id: int,
     request: Request[Any, Any, Any],
 ) -> None:
-    """Delete a transfer. Also removes file from disk if applicable."""
-    require_auth(request)
+    """Delete a transfer owned by the current user."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        transfer = db.query(Transfer).filter(Transfer.id == transfer_id).first()
+        transfer = db.query(Transfer).filter(
+            Transfer.id == transfer_id, Transfer.user_id == user_id
+        ).first()
         if transfer is None:
             raise NotFoundException(f"Transfer {transfer_id} not found")
 
         if transfer.type == "file":
-            for path in (TRANSFERS_DIR / str(transfer.id), THUMBS_DIR / f"{transfer.id}.webp"):
+            for path in (
+                user_transfers_dir(user_id) / str(transfer.id),
+                user_thumbs_dir(user_id) / f"{transfer.id}.webp",
+            ):
                 try:
                     os.remove(path)
                 except OSError:
@@ -162,15 +179,20 @@ async def batch_delete_transfers(
     data: BatchDeleteRequest,
     request: Request[Any, Any, Any],
 ) -> None:
-    """Delete multiple transfers in a single transaction."""
-    require_auth(request)
+    """Delete multiple transfers owned by the current user."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        transfers = db.query(Transfer).filter(Transfer.id.in_(data.ids)).all()
+        transfers = db.query(Transfer).filter(
+            Transfer.id.in_(data.ids), Transfer.user_id == user_id
+        ).all()
         for transfer in transfers:
             if transfer.type == "file":
-                for path in (TRANSFERS_DIR / str(transfer.id), THUMBS_DIR / f"{transfer.id}.webp"):
+                for path in (
+                    user_transfers_dir(user_id) / str(transfer.id),
+                    user_thumbs_dir(user_id) / f"{transfer.id}.webp",
+                ):
                     try:
                         os.remove(path)
                     except OSError:
@@ -186,19 +208,21 @@ async def download_transfer(
     transfer_id: int,
     request: Request[Any, Any, Any],
 ) -> Response | File:
-    """Download a transfer. Files served with original filename; text as text/plain."""
-    require_auth(request)
+    """Download a transfer owned by the current user."""
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
-        transfer = db.query(Transfer).filter(Transfer.id == transfer_id).first()
+        transfer = db.query(Transfer).filter(
+            Transfer.id == transfer_id, Transfer.user_id == user_id
+        ).first()
         if transfer is None:
             raise NotFoundException(f"Transfer {transfer_id} not found")
 
         if transfer.type == "text":
             return Response(content=transfer.content, media_type="text/plain")
 
-        file_path = TRANSFERS_DIR / str(transfer.id)
+        file_path = user_transfers_dir(user_id) / str(transfer.id)
         if not file_path.exists():
             raise NotFoundException("File not found on disk")
 
@@ -218,23 +242,23 @@ async def download_transfer(
 
 @post("/batch-download")
 async def batch_download_transfers(
-    data: BatchDeleteRequest,  # Reuse same schema — just a list of IDs
+    data: BatchDeleteRequest,
     request: Request[Any, Any, Any],
 ) -> Stream:
     """Download multiple file transfers as a streaming zip."""
-    require_auth(request)
+    user_id = require_auth(request)
 
     db = SessionLocal()
     try:
         transfers = (
             db.query(Transfer)
-            .filter(Transfer.id.in_(data.ids), Transfer.type == "file")
+            .filter(Transfer.id.in_(data.ids), Transfer.user_id == user_id, Transfer.type == "file")
             .all()
         )
         if not transfers:
             raise NotFoundException("No downloadable files found")
 
-        # Deduplicate filenames within the zip
+        transfers_dir = user_transfers_dir(user_id)
         names: dict[str, int] = {}
         file_entries: list[tuple[str, str]] = []
         for t in transfers:
@@ -245,7 +269,7 @@ async def batch_download_transfers(
                 name = f"{base} ({names[name]}){ext}"
             else:
                 names[name] = 0
-            file_entries.append((str(TRANSFERS_DIR / str(t.id)), name))
+            file_entries.append((str(transfers_dir / str(t.id)), name))
     finally:
         db.close()
 
@@ -268,19 +292,29 @@ async def batch_download_transfers(
     )
 
 
-THUMB_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+THUMB_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".pdf"}
 THUMB_SIZE = (150, 150)
 THUMB_QUALITY = 35
 
 
-def generate_thumbnail(transfer_id: int, source_path, filename: str) -> bool:
+def generate_thumbnail(transfer_id: int, user_id: int, source_path, filename: str) -> bool:
     """Generate a cached WebP thumbnail. Returns True on success."""
     ext = os.path.splitext(filename)[1].lower()
     if ext not in THUMB_EXTS:
         return False
 
     try:
-        if ext == ".svg":
+        if ext == ".pdf":
+            import pymupdf
+            doc = pymupdf.open(source_path)
+            page = doc[0]
+            # Scale to fit THUMB_SIZE while maintaining aspect ratio
+            scale = min(THUMB_SIZE[0] / page.rect.width, THUMB_SIZE[1] / page.rect.height)
+            mat = pymupdf.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            doc.close()
+        elif ext == ".svg":
             import cairosvg
             from io import BytesIO
             png_data = cairosvg.svg2png(url=str(source_path), output_width=THUMB_SIZE[0], output_height=THUMB_SIZE[1])
@@ -297,7 +331,7 @@ def generate_thumbnail(transfer_id: int, source_path, filename: str) -> bool:
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
 
-        thumb_path = THUMBS_DIR / f"{transfer_id}.webp"
+        thumb_path = user_thumbs_dir(user_id) / f"{transfer_id}.webp"
         img.save(thumb_path, format="WEBP", quality=THUMB_QUALITY, method=0)
         return True
     except Exception:
@@ -310,9 +344,10 @@ async def thumbnail_transfer(
     request: Request[Any, Any, Any],
 ) -> Response | File:
     """Serve a cached low-quality thumbnail for image transfers."""
-    require_auth(request)
+    user_id = require_auth(request)
 
-    thumb_path = THUMBS_DIR / f"{transfer_id}.webp"
+    thumbs_dir = user_thumbs_dir(user_id)
+    thumb_path = thumbs_dir / f"{transfer_id}.webp"
 
     # Serve from cache
     if thumb_path.exists():
@@ -325,18 +360,20 @@ async def thumbnail_transfer(
     # Generate on demand (first request for pre-existing transfers)
     db = SessionLocal()
     try:
-        transfer = db.query(Transfer).filter(Transfer.id == transfer_id).first()
+        transfer = db.query(Transfer).filter(
+            Transfer.id == transfer_id, Transfer.user_id == user_id
+        ).first()
         if transfer is None:
             raise NotFoundException(f"Transfer {transfer_id} not found")
 
         if transfer.type != "file":
             raise ClientException("Thumbnails only available for file transfers", status_code=400)
 
-        file_path = TRANSFERS_DIR / str(transfer.id)
+        file_path = user_transfers_dir(user_id) / str(transfer.id)
         if not file_path.exists():
             raise NotFoundException("File not found on disk")
 
-        if not generate_thumbnail(transfer.id, file_path, transfer.content):
+        if not generate_thumbnail(transfer.id, user_id, file_path, transfer.content):
             raise ClientException("Thumbnails only available for images", status_code=400)
 
         return File(

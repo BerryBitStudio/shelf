@@ -14,7 +14,7 @@ async def health_check() -> dict:
 
 
 cors_config = CORSConfig(
-    allow_origins=["https://mutantcacti.com", "https://me.mutantcacti.com"],
+    allow_origins=["https://shelf.mutantcacti.com"],
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
     allow_credentials=True,
@@ -24,6 +24,7 @@ app = Litestar(
     route_handlers=[health_check, auth_router, transfers_router],
     cors_config=cors_config,
     on_startup=[lambda: (init_db(), TRANSFERS_DIR.mkdir(parents=True, exist_ok=True), __import__('config').THUMBS_DIR.mkdir(parents=True, exist_ok=True))],
+    request_max_body_size=1024 * 1024 * 1024,  # 1GB
     debug=False,
 )
 

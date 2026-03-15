@@ -23,7 +23,7 @@ export default function DeleteButton() {
             <button
                 onClick={handleClick}
                 disabled={!active}
-                className={`pl-1 transition-all rounded-full cursor-pointer ${
+                className={`ml-1 transition-all rounded-full cursor-pointer ${
                     active
                         ? 'text-red-400 hover:text-red-300 focus-visible:text-red-300 hover-glow'
                         : 'text-text-muted opacity-50'

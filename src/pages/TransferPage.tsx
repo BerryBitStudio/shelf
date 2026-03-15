@@ -80,6 +80,13 @@ export default function TransferPage({ onHelp }: { onHelp: () => void }) {
             useTransferStore.setState({ selected: all })
             return
         }
+        if (e.key === '?') {
+            if (e.target instanceof HTMLInputElement && (e.target as HTMLInputElement).value) return
+            e.preventDefault()
+            if (e.target instanceof HTMLInputElement) (e.target as HTMLInputElement).blur()
+            onHelp()
+            return
+        }
         // Redirect printable keystrokes to text input
         if (!(e.target instanceof HTMLInputElement) && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
             clearSelection()

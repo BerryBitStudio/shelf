@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import AccessPage from './pages/AccessPage'
 import TransferPage from './pages/TransferPage'
 import HelpPage from './pages/HelpPage'
+import PasswordPage from './pages/PasswordPage'
 
 export default function App() {
     const [authed, setAuthed] = useState(null)
@@ -17,7 +18,9 @@ export default function App() {
 
     if (!authed) return <AccessPage onLogin={() => setAuthed(true)} />
 
-    if (page === 'help') return <HelpPage onBack={() => setPage('transfer')} />
+    if (page === 'help') return <HelpPage onBack={() => setPage('transfer')} onPassword={() => setPage('password')} />
+
+    if (page === 'password') return <PasswordPage onBack={() => setPage('help')} onHome={() => setPage('transfer')} />
 
     return <TransferPage onHelp={() => setPage('help')} />
 }

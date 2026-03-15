@@ -13,6 +13,15 @@ class LoginResponse(BaseModel):
     message: str = "logged in"
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=1)
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str = "password changed"
+
+
 class ApiKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
 
