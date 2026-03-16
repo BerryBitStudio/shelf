@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
     LuClipboard, LuImage, LuFileText, LuFileCode, LuFileTerminal,
     LuFileArchive, LuFile, LuCheck, LuFileAudio, LuFileVideo,
@@ -6,6 +6,8 @@ import {
 } from 'react-icons/lu'
 import { Transfer } from '../types/types'
 import useTransferStore from '../stores/TransferStore'
+
+const RADIUS = '4px'
 
 const EXT_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
     // Images
@@ -66,16 +68,148 @@ function getLabel(t: Transfer) {
     return t.content
 }
 
+// --- Sub-components ---
+
+function ImageItem({ transfer, dim, onClick, onDoubleClick }: {
+    transfer: Transfer, dim: string,
+    onClick: () => void, onDoubleClick: () => void,
+}) {
+    return (
+        <button
+            onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            className="group relative block overflow-hidden transition-colors cursor-pointer select-none bg-bg"
+            style={{ width: dim, height: dim, borderRadius: RADIUS }}
+        >
+            <img
+                src={`/api/transfers/${transfer.id}/thumbnail?v=${transfer.created_at}`}
+                alt={transfer.content}
+                loading="lazy"
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{
+                    maskImage: 'linear-gradient(to top, transparent, black 60%)',
+                    WebkitMaskImage: 'linear-gradient(to top, transparent, black 60%)',
+                }}
+            />
+            <LuImage size={14} className="absolute top-2 right-2 text-text opacity-30 group-hover:opacity-70 transition-opacity" />
+            <span className="absolute bottom-0 inset-x-0 text-xs text-text truncate text-center px-1 py-1">
+                {getLabel(transfer)}
+            </span>
+        </button>
+    )
+}
+
+function TextItem({ transfer, dim, iconSize, copied, onClick, onDoubleClick }: {
+    transfer: Transfer, dim: string, iconSize: number, copied: boolean,
+    onClick: () => void, onDoubleClick: () => void,
+}) {
+    return (
+        <button
+            onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            className="group relative flex items-start overflow-hidden transition-colors cursor-pointer select-none bg-surface"
+            style={{ width: dim, height: dim, borderRadius: RADIUS }}
+        >
+            {copied ? (
+                <span className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                    <LuCheck size={iconSize} className="text-accent-light animate-copied" />
+                    <span className="text-xs text-accent-light">Copied</span>
+                </span>
+            ) : (
+                <>
+                    <span
+                        className="text-xs text-text text-left w-full h-full p-3 overflow-hidden wrap-break-word leading-relaxed"
+                        style={{ maskImage: 'linear-gradient(to bottom, black calc(80% - 1.5rem), transparent 100%)' }}
+                    >
+                        {transfer.content}
+                    </span>
+                    <LuClipboard size={12} className="absolute top-2 right-2 text-text-muted opacity-25 group-hover:opacity-60 transition-opacity" />
+                </>
+            )}
+        </button>
+    )
+}
+
+function FileItem({ transfer, dim, iconSize, onClick, onDoubleClick }: {
+    transfer: Transfer, dim: string, iconSize: number,
+    onClick: () => void, onDoubleClick: () => void,
+}) {
+    const Icon = getIcon(transfer)
+    return (
+        <button
+            onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            className="group relative flex items-center justify-center overflow-hidden transition-colors cursor-pointer select-none bg-surface"
+            style={{ width: dim, height: dim, borderRadius: RADIUS }}
+        >
+            <span className="flex flex-col items-center justify-center gap-2 px-2 overflow-hidden">
+                <Icon size={iconSize} className="text-text-muted" />
+                <span className="text-xs text-text text-center w-full line-clamp-2 break-all">
+                    {getLabel(transfer)}
+                </span>
+            </span>
+        </button>
+    )
+}
+
+function EditItem({ transfer, dim, editValue, setEditValue, editRef, onKeyDown, onCommitEdit, onCancelEdit }: {
+    transfer: Transfer, dim: string,
+    editValue: string, setEditValue: (v: string) => void,
+    editRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
+    onKeyDown: (e: React.KeyboardEvent) => void,
+    onCommitEdit?: (v: string) => void, onCancelEdit?: () => void,
+}) {
+    function handleBlur() {
+        const trimmed = editValue.trim()
+        if (trimmed) onCommitEdit?.(trimmed)
+        else onCancelEdit?.()
+    }
+
+    return (
+        <div className="relative flex items-center justify-center bg-surface border border-accent/40"
+             style={{ width: dim, height: dim, borderRadius: RADIUS }}>
+            {transfer.type === 'text' ? (
+                <textarea
+                    ref={editRef as React.RefObject<HTMLTextAreaElement>}
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onBlur={handleBlur}
+                    className="w-full h-full p-3 text-xs text-text bg-transparent resize-none outline-none"
+                />
+            ) : (
+                <input
+                    ref={editRef as React.RefObject<HTMLInputElement>}
+                    type="text"
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onBlur={handleBlur}
+                    className="w-full px-3 text-xs text-text text-center bg-transparent outline-none"
+                />
+            )}
+        </div>
+    )
+}
+
+// --- Main component ---
+
 interface TransferItemProps {
     transfer: Transfer
     size?: number
+    editing?: boolean
+    onStartEdit?: () => void
+    onCommitEdit?: (newContent: string) => void
+    onCancelEdit?: () => void
 }
 
-export default function TransferItem({ transfer, size = 100 }: TransferItemProps) {
+export default function TransferItem({ transfer, size = 100, editing, onStartEdit, onCommitEdit, onCancelEdit }: TransferItemProps) {
     const { selected, toggleSelect, download } = useTransferStore()
     const [copied, setCopied] = useState(false)
+    const [editValue, setEditValue] = useState(transfer.content)
+    const editRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
     const isSelected = selected.includes(transfer.id)
-    const Icon = getIcon(transfer)
     const iconSize = Math.round(size * 0.4)
     const dim = `${size}px`
     const clickTimer = useRef<number | null>(null)
@@ -86,97 +220,79 @@ export default function TransferItem({ transfer, size = 100 }: TransferItemProps
         setTimeout(() => setCopied(false), 1200)
     }
 
-    function handleClick() {
-        if (transfer.type === 'text') {
-            copyText()
-            if (selected.includes(transfer.id)) toggleSelect(transfer.id)
-            return
-        } else {
-            // Delay toggle so double-click can cancel it
-            clickTimer.current = window.setTimeout(() => {
-                toggleSelect(transfer.id)
-                clickTimer.current = null
-            }, 50)
+    useEffect(() => {
+        if (editing && editRef.current) {
+            setEditValue(transfer.content)
+            editRef.current.focus()
+            editRef.current.select()
         }
+    }, [editing])
+
+    function handleContextMenu(e: React.MouseEvent) {
+        e.preventDefault()
+        onStartEdit?.()
+    }
+
+    function handleEditKeyDown(e: React.KeyboardEvent) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            const trimmed = editValue.trim()
+            if (trimmed) onCommitEdit?.(trimmed)
+        } else if (e.key === 'Escape') {
+            onCancelEdit?.()
+        }
+        e.stopPropagation()
+    }
+
+    useEffect(() => {
+        function onCopy(e: Event) {
+            if ((e as CustomEvent).detail === transfer.id) copyText()
+        }
+        window.addEventListener('shelf:copy', onCopy)
+        return () => window.removeEventListener('shelf:copy', onCopy)
+    }, [transfer.id])
+
+    function handleClick() {
+        clickTimer.current = window.setTimeout(() => {
+            toggleSelect(transfer.id)
+            clickTimer.current = null
+        }, 50)
     }
 
     function handleDoubleClick() {
+        if (clickTimer.current != null) {
+            clearTimeout(clickTimer.current)
+            clickTimer.current = null
+        }
         if (transfer.type === 'text') {
             copyText()
         } else {
-            if (clickTimer.current != null) {
-                clearTimeout(clickTimer.current)
-                clickTimer.current = null
-            }
             download(transfer.id)
         }
     }
 
+    let content
+    if (editing) {
+        content = <EditItem transfer={transfer} dim={dim} editValue={editValue}
+                            setEditValue={setEditValue} editRef={editRef}
+                            onKeyDown={handleEditKeyDown} onCommitEdit={onCommitEdit} onCancelEdit={onCancelEdit} />
+    } else if (isImage(transfer)) {
+        content = <ImageItem transfer={transfer} dim={dim}
+                             onClick={handleClick} onDoubleClick={handleDoubleClick} />
+    } else if (transfer.type === 'text') {
+        content = <TextItem transfer={transfer} dim={dim} iconSize={iconSize} copied={copied}
+                            onClick={handleClick} onDoubleClick={handleDoubleClick} />
+    } else {
+        content = <FileItem transfer={transfer} dim={dim} iconSize={iconSize}
+                            onClick={handleClick} onDoubleClick={handleDoubleClick} />
+    }
+
     return (
         <div className={`glow-wrap${isSelected ? ' active' : ''}`} data-transfer-id={transfer.id}
-             style={{ borderRadius: '10px' }}
-             title={transfer.type === 'file' ? transfer.content : undefined}>
-            {isImage(transfer) ? (
-                <button
-                    onClick={handleClick}
-                    onDoubleClick={handleDoubleClick}
-                    className="group relative block overflow-hidden
-                                transition-colors cursor-pointer select-none bg-bg"
-                    style={{ width: dim, height: dim, borderRadius: '10px' }}
-                >
-                    <img
-                        src={`/api/transfers/${transfer.id}/thumbnail?v=${transfer.created_at}`}
-                        alt={transfer.content}
-                        loading="lazy"
-                        draggable={false}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{
-                            maskImage: 'linear-gradient(to top, transparent, black 60%)',
-                            WebkitMaskImage: 'linear-gradient(to top, transparent, black 60%)',
-                        }}
-                    />
-                    <LuImage size={14} className="absolute top-2 right-2 text-text opacity-30 group-hover:opacity-70 transition-opacity" />
-                    <span className="absolute bottom-0 inset-x-0 text-xs text-text truncate
-                                     text-center px-1 py-1">
-                        {getLabel(transfer)}
-                    </span>
-                </button>
-            ) : (
-                <button
-                    onClick={handleClick}
-                    onDoubleClick={handleDoubleClick}
-                    className={`group relative flex rounded-lg overflow-hidden
-                                transition-colors cursor-pointer select-none bg-surface
-                                ${transfer.type === 'text' ? 'items-start' : 'items-center justify-center'}`}
-                    style={{ width: dim, height: dim }}
-                >
-                    {transfer.type === 'text' ? (
-                        copied ? (
-                            <span className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-                                <LuCheck size={iconSize} className="text-accent-light animate-copied" />
-                                <span className="text-xs text-accent-light">Copied</span>
-                            </span>
-                        ) : (
-                            <>
-                                <span
-                                    className="text-xs text-text text-left w-full h-full p-3 overflow-hidden wrap-break-word leading-relaxed"
-                                    style={{ maskImage: 'linear-gradient(to bottom, black calc(80% - 1.5rem), transparent 100%)' }}
-                                >
-                                    {transfer.content}
-                                </span>
-                                <LuClipboard size={12} className="absolute top-2 right-2 text-text-muted opacity-25 group-hover:opacity-60 transition-opacity" />
-                            </>
-                        )
-                    ) : (
-                        <span className="flex flex-col items-center justify-center gap-2 px-2 overflow-hidden">
-                            <Icon size={iconSize} className="text-text-muted" />
-                            <span className="text-xs text-text text-center w-full line-clamp-2 break-all">
-                                {getLabel(transfer)}
-                            </span>
-                        </span>
-                    )}
-                </button>
-            )}
+             style={{ borderRadius: RADIUS }}
+             title={transfer.type === 'file' ? transfer.content : undefined}
+             onContextMenu={handleContextMenu}>
+            {content}
         </div>
     )
 }

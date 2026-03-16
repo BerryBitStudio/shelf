@@ -19,6 +19,7 @@ interface TransferStore {
     batchRemove: (ids: number[]) => Promise<void>
     download: (id: number) => void
     batchDownload: (ids: number[]) => void
+    rename: (id: number, newContent: string) => Promise<void>
     toggleSelect: (id: number) => void
     clearSelection: () => void
 }
@@ -226,6 +227,23 @@ const useTransferStore = create<TransferStore>((set, get) => ({
             })
             .catch(e => set({ error: e.message }))
             .finally(() => inflightDown(set))
+    },
+
+    async rename(id: number, newContent: string) {
+        inflightUp(set, 'Renaming')
+        try {
+            const res = await api(`/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: newContent }),
+            })
+            const updated: Transfer = await res.json()
+            set({ transfers: get().transfers.map(t => t.id === id ? updated : t) })
+        } catch (e: any) {
+            set({ error: e.message })
+        } finally {
+            inflightDown(set)
+        }
     },
 
     toggleSelect(id: number) {

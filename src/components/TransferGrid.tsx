@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } fr
 import useTransferStore from '../stores/TransferStore'
 import TransferItem from './TransferItem'
 import TransferBar from './TransferBar'
-
 const MAX_ITEM = 100
 const GAP = 16
 const MIN_ITEM = 40
@@ -49,8 +48,9 @@ function rectsIntersect(
 }
 
 export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
-    const { transfers, fetch, uploadFile, clearSelection } = useTransferStore()
+    const { transfers, fetch, uploadFile, rename, clearSelection } = useTransferStore()
     const [dragging, setDragging] = useState(false)
+    const [editingId, setEditingId] = useState<number | null>(null)
     const [lasso, setLasso] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null)
     const lassoRef = useRef(lasso)
     lassoRef.current = lasso
@@ -62,6 +62,14 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
     const didLassoRef = useRef(false)
 
     useEffect(() => { fetch() }, [fetch])
+
+    useEffect(() => {
+        function onRename(e: Event) {
+            setEditingId((e as CustomEvent).detail)
+        }
+        window.addEventListener('shelf:rename', onRename)
+        return () => window.removeEventListener('shelf:rename', onRename)
+    }, [])
 
     useEffect(() => {
         const el = barRef.current
@@ -206,18 +214,10 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
         Array.from(e.dataTransfer.files).forEach(f => uploadFile(f))
     }, [uploadFile])
 
-    const maxY = bounds.minY + bounds.rows - 1
-    const minHeight = transfers.length > 0
-        ? 2 * (Math.max(
-            Math.abs(bounds.minY * cell - cell / 2 + BAR_OFFSET),
-            Math.abs(maxY * cell + cell / 2 + BAR_OFFSET),
-        ) + GAP)
-        : 0
-
     return (
         <div
             ref={containerRef}
-            className={`flex-1 flex flex-col transition-colors ${
+            className={`flex-1 flex flex-col overflow-auto transition-colors ${
                 dragging ? 'bg-accent/5' : ''
             }`}
             onClick={e => {
@@ -229,34 +229,32 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
             onDrop={handleFileDrop}
         >
             <div
-                ref={barRef}
-                className="fixed inset-x-0 mx-auto w-fit max-w-lg px-4 z-20"
-                style={{
-                    top: transfers.length > 0
-                        ? `max(1rem, calc(50vh + ${bounds.minY * cell - cell / 2 - GAP - barHeight + BAR_OFFSET}px))`
-                        : `calc(50vh - ${barHeight / 2}px)`,
-                    transition: 'top 0.3s ease-out',
-                }}
-            >
-                <div
-                    className="absolute left-1/2 -translate-x-1/2 w-screen pointer-events-none z-[-1]"
-                    style={{
-                        top: '-0.5rem',
-                        bottom: '-1rem',
-                        opacity: dragging ? 0 : 1,
-                        transition: dragging ? 'none' : 'opacity 300ms',
-                        background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
-                    }}
-                />
-                <TransferBar onHelp={onHelp} />
-            </div>
-
-            <div
                 ref={gridRef}
-                className="flex-1 relative select-none overflow-y-auto overflow-x-hidden"
-                style={{ minHeight }}
+                className="flex-1 relative select-none overflow-visible"
                 onMouseDown={transfers.length > 0 ? handleMouseDown : undefined}
             >
+                <div
+                    ref={barRef}
+                    className="absolute inset-x-0 mx-auto w-fit max-w-lg px-4 z-20"
+                    style={{
+                        top: transfers.length > 0
+                            ? `calc(50vh + ${bounds.minY * cell - cell / 2 - GAP - barHeight + BAR_OFFSET}px)`
+                            : `calc(50vh - ${barHeight / 2}px)`,
+                        transition: 'top 0.3s ease-out',
+                    }}
+                >
+                    <div
+                        className="absolute inset-x-0 pointer-events-none z-[-1]"
+                        style={{
+                            top: '-0.5rem',
+                            bottom: '-1rem',
+                            opacity: dragging ? 0 : 1,
+                            transition: dragging ? 'none' : 'opacity 300ms',
+                            background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
+                        }}
+                    />
+                    <TransferBar onHelp={onHelp} />
+                </div>
                 {transfers.map((t, i) => {
                     const [gx, gy] = positions[i]
                     return (
@@ -266,12 +264,16 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
                             style={{
                                 left: `calc(50% + ${gx * cell - cell / 2}px)`,
                                 top: `calc(50% + ${gy * cell - cell / 2 + BAR_OFFSET}px)`,
-                                transition: 'left 0.3s ease-out, top 0.3s ease-out',
+                                transition: 'left 0.15s cubic-bezier(0, 0, 0.2, 1), top 0.15s cubic-bezier(0, 0, 0.2, 1)',
                             }}
                         >
                             <TransferItem
                                 transfer={t}
                                 size={itemSize}
+                                editing={editingId === t.id}
+                                onStartEdit={() => setEditingId(t.id)}
+                                onCommitEdit={(newContent) => { rename(t.id, newContent); setEditingId(null) }}
+                                onCancelEdit={() => setEditingId(null)}
                             />
                         </div>
                     )
