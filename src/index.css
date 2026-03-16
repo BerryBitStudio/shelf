@@ -96,20 +96,20 @@ textarea:focus-visible {
 
 .glow-wrap {
     position: relative;
-    box-shadow: 0 0 4px 1px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.15);
     transition: background-color 0.15s ease-out, transform 0.3s ease-out, box-shadow 0.3s ease-out;
 }
 
 @keyframes select-pop {
     0% { rotate: 0deg; }
-    40% { rotate: -1.5deg; }
-    70% { rotate: 0.8deg; }
+    40% { rotate: -0.5deg; }
+    70% { rotate: 0.25deg; }
     100% { rotate: 0deg; }
 }
 
 .glow-wrap.active {
     background-color: rgba(35, 166, 122, 0.08);
-    animation: select-pop 0.35s ease-out;
+    animation: select-pop 0.2s ease-out;
 }
 
 .glow-wrap.active::after {
@@ -158,15 +158,15 @@ textarea:focus-visible {
 
 @keyframes nudge {
     0%, 100% { transform: rotate(0deg); filter: brightness(1); }
-    15% { transform: rotate(-3deg); filter: brightness(1.4); }
-    30% { transform: rotate(2.5deg); }
-    45% { transform: rotate(-2deg); }
-    60% { transform: rotate(1.5deg); filter: brightness(1.2); }
-    75% { transform: rotate(-0.5deg); }
+    15% { transform: rotate(-1deg); filter: brightness(1.25); }
+    30% { transform: rotate(0.8deg); }
+    45% { transform: rotate(-0.6deg); }
+    60% { transform: rotate(0.4deg); filter: brightness(1.1); }
+    75% { transform: rotate(-0.2deg); }
 }
 
 .animate-nudge {
-    animation: nudge 0.5s ease-out;
+    animation: nudge 0.35s ease-out;
 }
 
 @keyframes logo-spin {

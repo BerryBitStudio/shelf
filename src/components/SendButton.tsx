@@ -5,27 +5,17 @@ import useTransferStore from '../stores/TransferStore'
 export default function SendButton() {
     const { activity, createText } = useTransferStore()
     const [hasText, setHasText] = useState(false)
-    const [focused, setFocused] = useState(false)
 
     useEffect(() => {
         const input = document.getElementById('text-input') as HTMLInputElement | null
         if (!input) return
         function check() { setHasText(!!input!.value.trim()) }
-        function onFocus() { setFocused(true) }
-        function onBlur() { setFocused(false) }
         input.addEventListener('input', check)
-        input.addEventListener('focus', onFocus)
-        input.addEventListener('blur', onBlur)
         check()
-        setFocused(document.activeElement === input)
-        return () => {
-            input.removeEventListener('input', check)
-            input.removeEventListener('focus', onFocus)
-            input.removeEventListener('blur', onBlur)
-        }
+        return () => input.removeEventListener('input', check)
     }, [])
 
-    const disabled = !hasText || !focused || !!activity
+    const disabled = !hasText || !!activity
 
     function handleSend() {
         const input = document.getElementById('text-input') as HTMLInputElement | null
@@ -52,10 +42,10 @@ export default function SendButton() {
         <button
             onMouseDown={e => { e.preventDefault(); handleSend() }}
             disabled={disabled}
-            className="text-bg bg-accent hover:bg-accent-light disabled:opacity-40 transition-all rounded-full cursor-pointer px-2 py-2 mr-0.5"
+            className="text-text-muted hover:text-accent disabled:opacity-40 transition-all rounded-full cursor-pointer"
             title="Send text"
         >
-            <LuSendHorizontal size={14} />
+            <LuSendHorizontal size={16} />
         </button>
     )
 }

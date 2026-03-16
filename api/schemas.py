@@ -50,6 +50,10 @@ class TransferCreate(BaseModel):
     content: str = Field(..., min_length=1)
 
 
+class TransferRename(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
 class TransferResponse(BaseModel):
     id: int
     type: TransferType

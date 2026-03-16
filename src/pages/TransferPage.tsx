@@ -72,12 +72,30 @@ export default function TransferPage({ onHelp }: { onHelp: () => void }) {
             }
             return
         }
+        if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+            if (e.target instanceof HTMLInputElement) return
+            const { selected, transfers } = useTransferStore.getState()
+            if (selected.length === 1) {
+                const t = transfers.find(t => t.id === selected[0])
+                if (t && t.type === 'text') {
+                    e.preventDefault()
+                    navigator.clipboard.writeText(t.content)
+                    window.dispatchEvent(new CustomEvent('shelf:copy', { detail: t.id }))
+                }
+            }
+            return
+        }
         if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
             if (e.target instanceof HTMLInputElement && (e.target as HTMLInputElement).value) return
+            const all = useTransferStore.getState().transfers
+            if (all.length === 0) {
+                const input = document.getElementById('text-input') as HTMLInputElement | null
+                if (input) { input.focus(); input.select() }
+                return
+            }
             e.preventDefault()
             if (e.target instanceof HTMLInputElement) (e.target as HTMLInputElement).blur()
-            const all = useTransferStore.getState().transfers.map(t => t.id)
-            useTransferStore.setState({ selected: all })
+            useTransferStore.setState({ selected: all.map(t => t.id) })
             return
         }
         if (e.key === '?') {
@@ -87,8 +105,16 @@ export default function TransferPage({ onHelp }: { onHelp: () => void }) {
             onHelp()
             return
         }
+        if (e.key === 'F2') {
+            const { selected } = useTransferStore.getState()
+            if (selected.length === 1) {
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent('shelf:rename', { detail: selected[0] }))
+            }
+            return
+        }
         // Redirect printable keystrokes to text input
-        if (!(e.target instanceof HTMLInputElement) && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+        if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
             clearSelection()
             document.getElementById('text-input')?.focus()
         }

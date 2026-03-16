@@ -6,7 +6,7 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from litestar import Router, get, post, delete, Request
+from litestar import Router, get, post, patch, delete, Request
 from litestar.datastructures import UploadFile
 from litestar.enums import RequestEncodingType
 from litestar.exceptions import NotFoundException, ClientException
@@ -17,7 +17,7 @@ from config import TRANSFERS_DIR, THUMBS_DIR
 from db import SessionLocal
 from models import Transfer
 from routes.auth import require_auth
-from schemas import BatchDeleteRequest, TransferCreate, TransferResponse
+from schemas import BatchDeleteRequest, TransferCreate, TransferRename, TransferResponse
 
 MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB per file
 MAX_USER_STORAGE = 1024 * 1024 * 1024  # 1GB total per user
@@ -402,8 +402,31 @@ async def thumbnail_transfer(
         db.close()
 
 
+@patch("/{transfer_id:int}")
+async def rename_transfer(
+    transfer_id: int,
+    data: TransferRename,
+    request: Request[Any, Any, Any],
+) -> TransferResponse:
+    """Rename a transfer (update display name or text content)."""
+    user_id = require_auth(request)
+    db = SessionLocal()
+    try:
+        transfer = db.query(Transfer).filter(
+            Transfer.id == transfer_id, Transfer.user_id == user_id
+        ).first()
+        if transfer is None:
+            raise NotFoundException(f"Transfer {transfer_id} not found")
+        transfer.content = data.content
+        db.commit()
+        db.refresh(transfer)
+        return transfer_to_response(transfer)
+    finally:
+        db.close()
+
+
 transfers_router = Router(path="/transfers", route_handlers=[
     create_text_transfer, create_file_transfer, list_transfers,
-    delete_transfer, batch_delete_transfers, batch_download_transfers,
-    download_transfer, thumbnail_transfer,
+    rename_transfer, delete_transfer, batch_delete_transfers,
+    batch_download_transfers, download_transfer, thumbnail_transfer,
 ])

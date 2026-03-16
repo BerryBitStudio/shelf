@@ -28,10 +28,10 @@ export default function TransferBar({ onHelp }: { onHelp: () => void }) {
                         <p className="absolute -top-6 left-3 text-red-400/80 text-xs whitespace-nowrap">{error}</p>
                     )}
                     <TextInput />
+                    <SendButton />
                     <UploadButton />
                     <DownloadButton />
                     <DeleteButton />
-                    <SendButton />
                 </div>
                 <div className="inline-flex items-center gap-3">
                     <button

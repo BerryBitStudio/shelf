@@ -48,19 +48,19 @@ export default function ConfirmModal({ message, onConfirm, onCancel }: ConfirmMo
             onClick={dismiss}
         >
             <div
-                className="bg-surface border border-border rounded-3xl px-8 py-6 max-w-sm w-full mx-4 transition-all duration-150"
+                className="bg-surface border border-border rounded-xl px-6 py-4 max-w-sm w-full mx-4 transition-all duration-150"
                 style={{
                     opacity: visible ? 1 : 0,
                     transform: visible ? 'scale(1)' : 'scale(0.95)',
                 }}
                 onClick={e => e.stopPropagation()}
             >
-                <p className="text-text text-base text-center mb-6">{message}</p>
-                <div className="flex gap-3">
+                <p className="text-text text-sm text-center mb-4">{message}</p>
+                <div className="flex gap-2">
                     <button
                         id="modal-cancel"
                         onClick={dismiss}
-                        className="flex-1 px-4 py-2.5 text-sm text-text-muted rounded-2xl bg-bg/50
+                        className="flex-1 px-3 py-2 text-sm text-text-muted rounded-lg bg-bg/50
                                    transition-colors cursor-pointer hover:brightness-125"
                     >
                         Cancel
@@ -69,7 +69,7 @@ export default function ConfirmModal({ message, onConfirm, onCancel }: ConfirmMo
                         id="modal-confirm"
                         onClick={confirm}
                         autoFocus
-                        className="flex-1 px-4 py-2.5 text-sm text-bg font-medium bg-red-400/60 rounded-2xl
+                        className="flex-1 px-3 py-2 text-sm text-bg font-medium bg-red-400/60 rounded-lg
                                    hover:bg-red-400/80 transition-colors cursor-pointer"
                         style={{ outlineColor: 'rgb(248 113 113 / 0.6)' }}
                     >
