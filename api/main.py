@@ -3,8 +3,9 @@ from litestar.config.cors import CORSConfig
 from typing import Any
 
 from config import TRANSFERS_DIR
+from datetime import datetime
 from db import init_db, SessionLocal
-from models import EndpointStat
+from models import EndpointStat, UserSession
 from routes.auth import auth_router
 from routes.transfers import transfers_router
 
@@ -41,6 +42,15 @@ async def stats() -> dict:
         db.close()
 
 
+def _cleanup_expired_sessions():
+    db = SessionLocal()
+    try:
+        db.query(UserSession).filter(UserSession.expires_at < datetime.utcnow()).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
 cors_config = CORSConfig(
     allow_origins=["https://shelf.mutantcacti.com"],
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
@@ -52,7 +62,7 @@ app = Litestar(
     route_handlers=[health_check, stats, auth_router, transfers_router],
     cors_config=cors_config,
     before_request=record_hit,
-    on_startup=[lambda: (init_db(), TRANSFERS_DIR.mkdir(parents=True, exist_ok=True), __import__('config').THUMBS_DIR.mkdir(parents=True, exist_ok=True))],
+    on_startup=[lambda: (init_db(), TRANSFERS_DIR.mkdir(parents=True, exist_ok=True), __import__('config').THUMBS_DIR.mkdir(parents=True, exist_ok=True), _cleanup_expired_sessions())],
     request_max_body_size=1024 * 1024 * 1024,  # 1GB
     debug=False,
 )

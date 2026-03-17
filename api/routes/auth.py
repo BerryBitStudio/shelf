@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import datetime, timedelta
 
@@ -27,18 +28,25 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
+def hash_token(token: str) -> str:
+    """Hash a high-entropy token with SHA-256 for O(1) indexed lookup."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def validate_session_token(token: str) -> int | None:
     """Validate session token against database. Returns user_id or None."""
     db = SessionLocal()
     try:
-        for session in db.query(UserSession).all():
-            if verify_password(token, session.token_hash):
-                if session.expires_at > datetime.utcnow():
-                    return session.user_id
-                # Expired - delete it
-                db.delete(session)
-                db.commit()
-                return None
+        session = db.query(UserSession).filter(
+            UserSession.token_hash == hash_token(token)
+        ).first()
+        if session is None:
+            return None
+        if session.expires_at > datetime.utcnow():
+            return session.user_id
+        # Expired - delete it
+        db.delete(session)
+        db.commit()
         return None
     finally:
         db.close()
@@ -59,11 +67,13 @@ def require_auth(request: Request[Any, Any, Any]) -> int:
         key = auth_header[7:]
         db = SessionLocal()
         try:
-            for api_key in db.query(ApiKey).all():
-                if verify_password(key, api_key.key_hash):
-                    api_key.last_used = datetime.utcnow()
-                    db.commit()
-                    return api_key.user_id
+            api_key = db.query(ApiKey).filter(
+                ApiKey.key_hash == hash_token(key)
+            ).first()
+            if api_key:
+                api_key.last_used = datetime.utcnow()
+                db.commit()
+                return api_key.user_id
         finally:
             db.close()
 
@@ -75,6 +85,8 @@ async def login(data: LoginRequest) -> Response[LoginResponse]:
     """Login with password, returns session cookie."""
     db = SessionLocal()
     try:
+        db.query(UserSession).filter(UserSession.expires_at < datetime.utcnow()).delete()
+
         # Iterate all users, match by password
         matched_user = None
         for user in db.query(User).all():
@@ -87,7 +99,7 @@ async def login(data: LoginRequest) -> Response[LoginResponse]:
 
         # Create session token and store hash in DB
         session_token = secrets.token_urlsafe(32)
-        token_hash = hash_password(session_token)
+        token_hash = hash_token(session_token)
         expires_at = datetime.utcnow() + timedelta(seconds=SESSION_MAX_AGE)
 
         session_record = UserSession(
@@ -122,11 +134,12 @@ async def logout(request: Request[Any, Any, Any]) -> Response:
     if session_token:
         db = SessionLocal()
         try:
-            for session in db.query(UserSession).all():
-                if verify_password(session_token, session.token_hash):
-                    db.delete(session)
-                    db.commit()
-                    break
+            session = db.query(UserSession).filter(
+                UserSession.token_hash == hash_token(session_token)
+            ).first()
+            if session:
+                db.delete(session)
+                db.commit()
         finally:
             db.close()
 
@@ -139,8 +152,8 @@ async def logout(request: Request[Any, Any, Any]) -> Response:
 async def change_password(
     data: ChangePasswordRequest,
     request: Request[Any, Any, Any],
-) -> ChangePasswordResponse:
-    """Change the current user's password."""
+) -> Response[ChangePasswordResponse]:
+    """Change the current user's password. Invalidates all sessions."""
     user_id = require_auth(request)
 
     db = SessionLocal()
@@ -158,9 +171,33 @@ async def change_password(
                 raise ClientException("Password is already in use", status_code=409)
 
         user.password_hash = hash_password(data.new_password)
+
+        # Invalidate all existing sessions
+        db.query(UserSession).filter(UserSession.user_id == user_id).delete()
+
+        # Issue a fresh session
+        session_token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(seconds=SESSION_MAX_AGE)
+        db.add(UserSession(
+            token_hash=hash_token(session_token),
+            user_id=user_id,
+            expires_at=expires_at,
+        ))
         db.commit()
 
-        return ChangePasswordResponse()
+        response = Response(
+            ChangePasswordResponse(),
+            status_code=200,
+        )
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=session_token,
+            max_age=SESSION_MAX_AGE,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+        )
+        return response
     finally:
         db.close()
 
@@ -176,7 +213,7 @@ async def create_api_key(
     db = SessionLocal()
     try:
         raw_key = secrets.token_urlsafe(32)
-        key_hash = hash_password(raw_key)
+        key_hash = hash_token(raw_key)
 
         api_key = ApiKey(
             key_hash=key_hash,
