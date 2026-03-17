@@ -47,7 +47,7 @@ function rectsIntersect(
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
 }
 
-export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
+export default function TransferGrid({ onHelp, onDelete }: { onHelp: () => void; onDelete: () => void }) {
     const { transfers, fetch, uploadFile, rename, clearSelection } = useTransferStore()
     const [dragging, setDragging] = useState(false)
     const [editingId, setEditingId] = useState<number | null>(null)
@@ -235,7 +235,7 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
             >
                 <div
                     ref={barRef}
-                    className="absolute inset-x-0 mx-auto w-fit max-w-lg px-4 z-20"
+                    className="absolute left-1/2 -translate-x-1/2 w-fit max-w-lg px-4 z-20"
                     style={{
                         top: transfers.length > 0
                             ? `calc(50vh + ${bounds.minY * cell - cell / 2 - GAP - barHeight + BAR_OFFSET}px)`
@@ -253,14 +253,14 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
                             background: `linear-gradient(to bottom, transparent, var(--color-bg) 0.5rem, var(--color-bg) calc(100% - 1rem), transparent)`,
                         }}
                     />
-                    <TransferBar onHelp={onHelp} />
+                    <TransferBar onHelp={onHelp} onDelete={onDelete} />
                 </div>
                 {transfers.map((t, i) => {
                     const [gx, gy] = positions[i]
                     return (
                         <div
                             key={t.id}
-                            className="absolute z-10"
+                            className="absolute z-10 will-change-transform"
                             style={{
                                 left: `calc(50% + ${gx * cell - cell / 2}px)`,
                                 top: `calc(50% + ${gy * cell - cell / 2 + BAR_OFFSET}px)`,
@@ -280,7 +280,7 @@ export default function TransferGrid({ onHelp }: { onHelp: () => void }) {
                 })}
                 {lassoStyle && (
                     <div
-                        className="absolute pointer-events-none border border-accent/50 rounded-sm z-30"
+                        className="absolute pointer-events-none border border-accent/50 z-30"
                         style={{ ...lassoStyle, backgroundColor: 'rgba(35, 166, 122, 0.08)' }}
                     />
                 )}

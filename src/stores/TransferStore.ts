@@ -11,6 +11,7 @@ interface TransferStore {
     error: string | null
     selected: number[]
     statusText: string
+    usage: { used: number; limit: number } | null
 
     fetch: () => Promise<void>
     createText: (content: string) => Promise<number | undefined>
@@ -36,13 +37,16 @@ async function api(path: string, init?: RequestInit) {
     return res
 }
 
-function getStatusText(transfers: Transfer[]): string {
-    const files = transfers.filter(t => t.type === 'file').length
-    const texts = transfers.filter(t => t.type === 'text').length
-    const parts: string[] = []
-    if (files) parts.push(`${files} file${files !== 1 ? 's' : ''}`)
-    if (texts) parts.push(`${texts} text${texts !== 1 ? 's' : ''}`)
-    return parts.join(', ') || 'Empty'
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function getStatusText(usage: { used: number; limit: number } | null): string {
+    if (usage) return formatBytes(usage.used)
+    return ''
 }
 
 // Atomic inflight helpers to avoid race conditions
@@ -50,12 +54,17 @@ function inflightUp(set: any, activity: string) {
     set((s: TransferStore) => ({ inflight: s.inflight + 1, activity, error: null }))
 }
 
-function inflightDown(set: any) {
+function inflightDown(set: any, get: any) {
     set((s: TransferStore) => {
         const n = s.inflight - 1
-        return n === 0
-            ? { inflight: 0, activity: '', statusText: getStatusText(s.transfers) }
-            : { inflight: n }
+        if (n === 0) {
+            // Refresh usage when all activity finishes
+            api('/usage').then(r => r.json()).then(usage => {
+                set({ usage, statusText: getStatusText(usage) })
+            }).catch(() => {})
+            return { inflight: 0, activity: '', statusText: getStatusText(s.usage) }
+        }
+        return { inflight: n }
     })
 }
 
@@ -80,6 +89,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
     ready: false,
     error: null,
     statusText: 'try help',
+    usage: null,
     selected: [],
 
     async fetch() {
@@ -92,7 +102,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         } catch (e: any) {
             set({ error: e.message })
         } finally {
-            inflightDown(set)
+            inflightDown(set, get)
             set({ ready: true })
         }
     },
@@ -114,7 +124,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         } catch (e: any) {
             set({ error: e.message })
         } finally {
-            inflightDown(set)
+            inflightDown(set, get)
         }
     },
 
@@ -140,7 +150,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
             } catch (e: any) {
                 set({ error: e.message })
             } finally {
-                inflightDown(set)
+                inflightDown(set, get)
             }
         })
         drainQueue()
@@ -163,7 +173,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
                 set({ transfers: await res.json() })
             } catch { /* fetch error already surfaced */ }
         } finally {
-            inflightDown(set)
+            inflightDown(set, get)
         }
     },
 
@@ -189,7 +199,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
                 set({ transfers: await res.json() })
             } catch { /* fetch error already surfaced */ }
         } finally {
-            inflightDown(set)
+            inflightDown(set, get)
         }
     },
 
@@ -226,7 +236,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
                 URL.revokeObjectURL(url)
             })
             .catch(e => set({ error: e.message }))
-            .finally(() => inflightDown(set))
+            .finally(() => inflightDown(set, get))
     },
 
     async rename(id: number, newContent: string) {
@@ -242,7 +252,7 @@ const useTransferStore = create<TransferStore>((set, get) => ({
         } catch (e: any) {
             set({ error: e.message })
         } finally {
-            inflightDown(set)
+            inflightDown(set, get)
         }
     },
 

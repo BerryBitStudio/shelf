@@ -138,7 +138,13 @@ export default function TransferPage({ onHelp }: { onHelp: () => void }) {
 
     return (
         <div className="relative flex flex-col h-screen">
-            <TransferGrid onHelp={onHelp} />
+            <TransferGrid onHelp={onHelp} onDelete={() => {
+                const { selected } = useTransferStore.getState()
+                if (selected.length > 0) {
+                    setDeleteTargets(selected)
+                    setShowConfirm(true)
+                }
+            }} />
             <ToastContainer />
             {showConfirm && (
                 <ConfirmModal

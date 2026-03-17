@@ -8,6 +8,7 @@ from PIL import Image, ImageOps
 
 from litestar import Router, get, post, patch, delete, Request
 from litestar.datastructures import UploadFile
+from litestar.datastructures.headers import CacheControlHeader
 from litestar.enums import RequestEncodingType
 from litestar.exceptions import NotFoundException, ClientException
 from litestar.params import Body
@@ -137,7 +138,7 @@ async def create_file_transfer(
         db.close()
 
 
-@get("/")
+@get("/", cache_control=CacheControlHeader(no_store=True))
 async def list_transfers(
     request: Request[Any, Any, Any],
 ) -> list[TransferResponse]:
@@ -173,18 +174,21 @@ async def delete_transfer(
         if transfer is None:
             raise NotFoundException(f"Transfer {transfer_id} not found")
 
+        # Collect file paths before deleting DB record
+        file_paths = []
         if transfer.type == "file":
-            for path in (
-                user_transfers_dir(user_id) / str(transfer.id),
-                user_thumbs_dir(user_id) / f"{transfer.id}.webp",
-            ):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
+            file_paths.append(user_transfers_dir(user_id) / str(transfer.id))
+            file_paths.append(user_thumbs_dir(user_id) / f"{transfer.id}.webp")
 
         db.delete(transfer)
         db.commit()
+
+        # Best-effort file cleanup after DB commit
+        for path in file_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
     finally:
         db.close()
 
@@ -202,18 +206,22 @@ async def batch_delete_transfers(
         transfers = db.query(Transfer).filter(
             Transfer.id.in_(data.ids), Transfer.user_id == user_id
         ).all()
+
+        # Collect all file paths before deleting DB records
+        file_paths = []
         for transfer in transfers:
             if transfer.type == "file":
-                for path in (
-                    user_transfers_dir(user_id) / str(transfer.id),
-                    user_thumbs_dir(user_id) / f"{transfer.id}.webp",
-                ):
-                    try:
-                        os.remove(path)
-                    except OSError:
-                        pass
+                file_paths.append(user_transfers_dir(user_id) / str(transfer.id))
+                file_paths.append(user_thumbs_dir(user_id) / f"{transfer.id}.webp")
             db.delete(transfer)
         db.commit()
+
+        # Best-effort file cleanup after DB commit
+        for path in file_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
     finally:
         db.close()
 
@@ -425,8 +433,24 @@ async def rename_transfer(
         db.close()
 
 
+@get("/usage")
+async def storage_usage(
+    request: Request[Any, Any, Any],
+) -> dict:
+    """Return current storage usage and limit for the authenticated user."""
+    user_id = require_auth(request)
+    transfers_dir = user_transfers_dir(user_id)
+    used = 0
+    if transfers_dir.exists():
+        for f in transfers_dir.iterdir():
+            if f.is_file():
+                used += f.stat().st_size
+    return {"used": used, "limit": 1024 * 1024 * 1024}
+
+
 transfers_router = Router(path="/transfers", route_handlers=[
     create_text_transfer, create_file_transfer, list_transfers,
     rename_transfer, delete_transfer, batch_delete_transfers,
     batch_download_transfers, download_transfer, thumbnail_transfer,
+    storage_usage,
 ])

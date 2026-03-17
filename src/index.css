@@ -96,7 +96,7 @@ textarea:focus-visible {
 
 .glow-wrap {
     position: relative;
-    box-shadow: 0 0 3px 1px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 4px 1px rgba(0, 0, 0, 0.15);
     transition: background-color 0.15s ease-out, transform 0.3s ease-out, box-shadow 0.3s ease-out;
 }
 

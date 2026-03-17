@@ -30,7 +30,9 @@ export default function TextInput() {
                     }
                 }
             })
-            setValue('')
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+            nativeSetter.call(e.currentTarget, '')
+            e.currentTarget.dispatchEvent(new Event('input', { bubbles: true }))
         }
     }
 
@@ -43,6 +45,7 @@ export default function TextInput() {
             onChange={e => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!!activity}
+            onBlur={e => { e.target.setSelectionRange(e.target.value.length, e.target.value.length) }}
             placeholder="Send text"
             id="text-input"
             className="peer w-full bg-transparent rounded-none

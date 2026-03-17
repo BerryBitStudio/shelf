@@ -19,6 +19,7 @@ export default function LogoSpinner({ className, spinning }: LogoSpinnerProps) {
 
     useEffect(() => {
         const s = state.current
+        if (spinning && s.t < 0.5) s.t = 0.5
         s.last = 0
         let raf: number
         function tick(now: number) {

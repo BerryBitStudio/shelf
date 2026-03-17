@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import useTransferStore from './TransferStore'
 
 interface AuthStore {
     authed: boolean | null
@@ -25,6 +26,7 @@ const useAuthStore = create<AuthStore>(set => ({
 
     logout() {
         fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+        useTransferStore.setState({ transfers: [], selected: [], statusText: 'try help', error: null, usage: null })
         set({ authed: false })
     },
 }))
