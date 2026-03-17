@@ -7,7 +7,7 @@ import {
 import { Transfer } from '../types/types'
 import useTransferStore from '../stores/TransferStore'
 
-const RADIUS = '4px'
+const RADIUS = '8px'
 
 const EXT_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
     // Images
@@ -61,6 +61,18 @@ function isImage(t: Transfer) {
 function getIcon(t: Transfer) {
     if (t.type === 'text') return LuClipboard
     return EXT_ICONS[getExt(t)] ?? LuFile
+}
+
+const MIME_MAP: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    svg: 'image/svg+xml', webp: 'image/webp', ico: 'image/x-icon', bmp: 'image/bmp',
+    pdf: 'application/pdf', zip: 'application/zip', mp3: 'audio/mpeg',
+    mp4: 'video/mp4', txt: 'text/plain', html: 'text/html', css: 'text/css',
+    js: 'application/javascript', json: 'application/json', xml: 'application/xml',
+}
+
+function getMime(t: Transfer): string {
+    return MIME_MAP[getExt(t)] ?? 'application/octet-stream'
 }
 
 function getLabel(t: Transfer) {
@@ -271,6 +283,16 @@ export default function TransferItem({ transfer, size = 100, editing, onStartEdi
         }
     }
 
+    function handleDragStart(e: React.DragEvent) {
+        if (transfer.type === 'text') {
+            e.dataTransfer.setData('text/plain', transfer.content)
+        } else {
+            const mime = getMime(transfer)
+            const url = `${window.location.origin}/api/transfers/${transfer.id}/download`
+            e.dataTransfer.setData('DownloadURL', `${mime}:${transfer.content}:${url}`)
+        }
+    }
+
     let content
     if (editing) {
         content = <EditItem transfer={transfer} dim={dim} editValue={editValue}
@@ -291,6 +313,8 @@ export default function TransferItem({ transfer, size = 100, editing, onStartEdi
         <div className={`glow-wrap${isSelected ? ' active' : ''}`} data-transfer-id={transfer.id}
              style={{ borderRadius: RADIUS }}
              title={transfer.type === 'file' ? transfer.content : undefined}
+             draggable={!editing}
+             onDragStart={handleDragStart}
              onContextMenu={handleContextMenu}>
             {content}
         </div>

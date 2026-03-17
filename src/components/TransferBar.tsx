@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import TextInput from './TextInput'
 import SendButton from './SendButton'
 import PasteButton from './PasteButton'
@@ -9,11 +10,24 @@ import LogoSpinner from './LogoSpinner'
 import InfoButton from './InfoButton'
 import useTransferStore from '../stores/TransferStore'
 
-export default function TransferBar({ onHelp }: { onHelp: () => void }) {
+export default function TransferBar({ onHelp, onDelete }: { onHelp: () => void; onDelete: () => void }) {
     const { fetch, activity, statusText, selected, error } = useTransferStore()
     const loading = !!activity
 
     const statusLabel = activity || (selected.length > 0 ? `${selected.length} selected` : statusText)
+
+    const [displayText, setDisplayText] = useState(statusLabel)
+    useEffect(() => {
+        if (statusLabel === displayText) return
+        setDisplayText('')
+        let i = 0
+        const id = setInterval(() => {
+            i++
+            setDisplayText(statusLabel.slice(0, i))
+            if (i >= statusLabel.length) clearInterval(id)
+        }, 12)
+        return () => clearInterval(id)
+    }, [statusLabel])
 
     return (
         <>
@@ -31,7 +45,7 @@ export default function TransferBar({ onHelp }: { onHelp: () => void }) {
                     <SendButton />
                     <UploadButton />
                     <DownloadButton />
-                    <DeleteButton />
+                    <DeleteButton onDelete={onDelete} />
                 </div>
                 <div className="inline-flex items-center gap-3">
                     <button
@@ -45,7 +59,7 @@ export default function TransferBar({ onHelp }: { onHelp: () => void }) {
                         />
                     </button>
                     <span className={`text-xs text-accent whitespace-nowrap min-w-16 ${loading ? 'opacity-100' : 'opacity-70'}`}>
-                        {statusLabel}
+                        {displayText}
                     </span>
                 </div>
             </div>
@@ -75,7 +89,7 @@ export default function TransferBar({ onHelp }: { onHelp: () => void }) {
                     <PasteButton />
                     <UploadButton />
                     <DownloadButton />
-                    <DeleteButton />
+                    <DeleteButton onDelete={onDelete} />
                 </div>
             </div>
         </>
